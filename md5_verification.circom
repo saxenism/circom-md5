@@ -1,9 +1,120 @@
 pragma circom 2.1.6;
 
 include "node_modules/circomlib/circuits/gates.circom";
+include "node_modules/circomlib/circuits/bitify.circom";
 include "node_modules/circomlib/circuits/comparators.circom";
 
-template Combine() {}
+template BitwiseAND() {
+    signal input in[2];
+    signal output out[32];
+
+    signal Ab[32];
+    signal Bb[32];
+
+    component bitwiseAnd[32];
+    component num2Bits[2];
+
+    num2Bits[0] = Num2Bits(32);
+    num2Bits[1] = Num2Bits(32);
+
+    num2Bits[0].in <== in[0];
+    num2Bits[1].in <== in[1];
+
+    Ab <== num2Bits[0].out;
+    Bb <== num2Bits[1].out;
+
+    for(var i = 0; i < 32; i++) {
+        bitwiseAnd[i] = AND();
+
+        bitwiseAnd[i].a <== Ab[i];
+        bitwiseAnd[i].b <== Bb[i];
+
+        out[i] <== bitwiseAnd[i].out;
+    }
+}
+
+template BitwiseOR() {
+    signal input in[2];
+    signal output out[32];
+
+    signal Ab[32];
+    signal Bb[32];
+
+    component bitwiseOr[32];
+    component num2Bits[2];
+
+    num2Bits[0] = Num2Bits(32);
+    num2Bits[1] = Num2Bits(32);
+
+    num2Bits[0].in <== in[0];
+    num2Bits[1].in <== in[1];
+
+    Ab <== num2Bits[0].out;
+    Bb <== num2Bits[1].out;
+
+    for(var i = 0; i < 32; i++) {
+        bitwiseOr[i] = OR();
+
+        bitwiseOr[i].a <== Ab[i];
+        bitwiseOr[i].b <== Bb[i];
+
+        out[i] <== bitwiseOr[i].out;
+    }
+}
+
+template BitwiseNOT() {
+    signal input in;
+    signal output out[32];
+
+    signal Ab[32];
+
+    component bitwiseNot[32];
+    component num2Bits = Num2Bits(32);
+
+    num2Bits.in <== in;
+
+    Ab <== num2Bits.out;
+
+    for(var i = 0; i < 32; i++) {
+        bitwiseNot[i] = NOT();
+
+        bitwiseNot[i].in <== Ab[i];
+        out[i] <== bitwiseNot[i].out;
+    }
+}
+
+template BitwiseXOR() {
+    signal input in[2];
+    signal output out[32];
+
+    signal Ab[32];
+    signal Bb[32];
+
+    component bitwiseXor[32];
+    component num2Bits[2];
+
+    num2Bits[0] = Num2Bits(32);
+    num2Bits[1] = Num2Bits(32);
+
+    num2Bits[0].in <== in[0];
+    num2Bits[1].in <== in[1];
+
+    Ab <== num2Bits[0].out;
+    Bb <== num2Bits[1].out;
+
+    for(var i = 0; i < 32; i++) {
+        bitwiseXor[i] = XOR();
+
+        bitwiseXor[i].a <== Ab[i];
+        bitwiseXor[i].b <== Bb[i];
+
+        out[i] <== bitwiseXor[i].out;
+    }
+}
+
+template Combine() {
+    signal input B, C, D, i;
+}
 
 template Md5() {
     // since the word size in the MD5 algo is 32 bits and the input size is 512, let's create an input signal of 16 elements.
