@@ -114,6 +114,7 @@ template BitwiseXOR() {
 
 template Combine() {
     signal input B, C, D, i;
+    signal output out <== 1;
 }
 
 template Md5() {
@@ -125,16 +126,16 @@ template Md5() {
     /// Range Check on the input in
     ////////////////////////////////
     // We need to constrain the input signals to be less than 2**32.
-    component isLessThan[16];
+    component isLessEqThan[16];
     signal rangeCheckArray[16];
 
     for(var i = 0; i < 16; i++) {
-        isLessThan[i] = LessThan(252);
+        isLessEqThan[i] = LessEqThan(32);
 
-        isLessThan[i].in[0] <== in[i];
-        isLessThan[i].in[1] <== 2**32;
+        isLessEqThan[i].in[0] <== 0;
+        isLessEqThan[i].in[1] <== ((in[i] - 0)*(2**32 - in[i]));
 
-        rangeCheckArray[i] <== isLessThan[i].out;
+        rangeCheckArray[i] <== isLessEqThan[i].out;
     }
 
     // Now we need to make sure that all the entries in the rangeCheckArray are 1.
@@ -155,10 +156,19 @@ template Md5() {
     states[0][2] <== 0x98badcfe;
     states[0][3] <== 0x10325476;
 
+    component combine[64];
+
     // First loop of state changes
     for(var i = 1; i < 16; i++) {
+        combine[i] = Combine();
+
+        combine[i].B <== states[i-1][1];
+        combine[i].C <== states[i-1][2];
+        combine[i].D <== states[i-1][3];
+        combine[i].i <== i;
+
         states[i][0] <== states[i-1][3];
-        states[i][1] <== Combine();
+        states[i][1] <== combine[i].out;
         states[i][2] <== states[i-1][1];
         states[i][3] <== states[i-1][2];
     }
@@ -167,8 +177,15 @@ template Md5() {
     for(var j = 16; j < 32; j++) {
         var i = (5 * i + 1) % 16;
 
+        combine[j] = Combine();
+
+        combine[j].B <== states[i-1][1];
+        combine[j].C <== states[i-1][2];
+        combine[j].D <== states[i-1][3];
+        combine[j].i <== i;
+
         states[i][0] <== states[i-1][3];
-        states[i][1] <== Combine();
+        states[i][1] <== combine[j].out;
         states[i][2] <== states[i-1][1];
         states[i][3] <== states[i-1][2];
     }
@@ -177,8 +194,15 @@ template Md5() {
     for(var l = 32; l < 48; l++) {
         var i = (3 * i + 5) % 16;
 
+        combine[l] = Combine();
+
+        combine[l].B <== states[i-1][1];
+        combine[l].C <== states[i-1][2];
+        combine[l].D <== states[i-1][3];
+        combine[l].i <== i;
+
         states[i][0] <== states[i-1][3];
-        states[i][1] <== Combine();
+        states[i][1] <== combine[l].out;
         states[i][2] <== states[i-1][1];
         states[i][3] <== states[i-1][2];
     }
@@ -187,8 +211,15 @@ template Md5() {
     for(var k = 48; k < 64; k++) {
         var i = (7 * i) % 16;
 
+        combine[k] = Combine();
+
+        combine[k].B <== states[i-1][1];
+        combine[k].C <== states[i-1][2];
+        combine[k].D <== states[i-1][3];
+        combine[k].i <== i;
+
         states[i][0] <== states[i-1][3];
-        states[i][1] <== Combine();
+        states[i][1] <== combine[k].out;
         states[i][2] <== states[i-1][1];
         states[i][3] <== states[i-1][2];
     }
