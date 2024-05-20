@@ -112,8 +112,23 @@ template BitwiseXOR() {
     }
 }
 
-template Combine() {
-    signal input B, C, D, i;
+template CombineLoop1() {
+    signal input B, C, D;
+    signal output out <== 1;
+}
+
+template CombineLoop2() {
+    signal input B, C, D;
+    signal output out <== 1;
+}
+
+template CombineLoop3() {
+    signal input B, C, D;
+    signal output out <== 1;
+}
+
+template CombineLoop4() {
+    signal input B, C, D;
     signal output out <== 1;
 }
 
@@ -156,79 +171,81 @@ template Md5() {
     states[0][2] <== 0x98badcfe;
     states[0][3] <== 0x10325476;
 
-    component combine[64];
+    component combine1[16];
+    component combine2[16];
+    component combine3[16];
+    component combine4[16];
 
     // First loop of state changes
     for(var i = 1; i < 16; i++) {
-        combine[i] = Combine();
+        combine1[i] = CombineLoop1();
 
-        combine[i].B <== states[i-1][1];
-        combine[i].C <== states[i-1][2];
-        combine[i].D <== states[i-1][3];
-        combine[i].i <== i;
+        combine1[i].B <== states[i-1][1];
+        combine1[i].C <== states[i-1][2];
+        combine1[i].D <== states[i-1][3];
 
         states[i][0] <== states[i-1][3];
-        states[i][1] <== combine[i].out;
+        states[i][1] <== combine1[i].out;
         states[i][2] <== states[i-1][1];
         states[i][3] <== states[i-1][2];
     }
 
     // Second loop of state changes
+    var c2_idx = 0;
     for(var j = 16; j < 32; j++) {
-        var i = (5 * i + 1) % 16;
+        combine2[c2_idx] = CombineLoop2();
 
-        combine[j] = Combine();
+        combine2[c2_idx].B <== states[j-1][1];
+        combine2[c2_idx].C <== states[j-1][2];
+        combine2[c2_idx].D <== states[j-1][3];
 
-        combine[j].B <== states[i-1][1];
-        combine[j].C <== states[i-1][2];
-        combine[j].D <== states[i-1][3];
-        combine[j].i <== i;
+        states[j][0] <== states[j-1][3];
+        states[j][1] <== combine2[c2_idx].out;
+        states[j][2] <== states[j-1][1];
+        states[j][3] <== states[j-1][2];
 
-        states[i][0] <== states[i-1][3];
-        states[i][1] <== combine[j].out;
-        states[i][2] <== states[i-1][1];
-        states[i][3] <== states[i-1][2];
+        c2_idx++;
     }
 
     // Third loop of state changes
+    var c3_idx = 0;
     for(var l = 32; l < 48; l++) {
-        var i = (3 * i + 5) % 16;
+        combine3[c3_idx] = CombineLoop3();
 
-        combine[l] = Combine();
+        combine3[c3_idx].B <== states[l-1][1];
+        combine3[c3_idx].C <== states[l-1][2];
+        combine3[c3_idx].D <== states[l-1][3];
 
-        combine[l].B <== states[i-1][1];
-        combine[l].C <== states[i-1][2];
-        combine[l].D <== states[i-1][3];
-        combine[l].i <== i;
+        states[l][0] <== states[l-1][3];
+        states[l][1] <== combine3[c3_idx].out;
+        states[l][2] <== states[l-1][1];
+        states[l][3] <== states[l-1][2];
 
-        states[i][0] <== states[i-1][3];
-        states[i][1] <== combine[l].out;
-        states[i][2] <== states[i-1][1];
-        states[i][3] <== states[i-1][2];
+        c3_idx++;
     }
 
     // Fourth loop of state changes
+    var c4_idx = 0;
     for(var k = 48; k < 64; k++) {
-        var i = (7 * i) % 16;
+        combine4[c4_idx] = CombineLoop4();
 
-        combine[k] = Combine();
+        combine4[c4_idx].B <== states[k-1][1];
+        combine4[c4_idx].C <== states[k-1][2];
+        combine4[c4_idx].D <== states[k-1][3];
 
-        combine[k].B <== states[i-1][1];
-        combine[k].C <== states[i-1][2];
-        combine[k].D <== states[i-1][3];
-        combine[k].i <== i;
+        states[k][0] <== states[k-1][3];
+        states[k][1] <== combine4[c4_idx].out;
+        states[k][2] <== states[k-1][1];
+        states[k][3] <== states[k-1][2];
 
-        states[i][0] <== states[i-1][3];
-        states[i][1] <== combine[k].out;
-        states[i][2] <== states[i-1][1];
-        states[i][3] <== states[i-1][2];
+        c4_idx++;
     }
 
-    out[0] <== states[63][0];
-    out[1] <== states[63][1];
-    out[2] <== states[63][2];
-    out[3] <== states[63][3];
-
+    // Making sure that the last state change corresponds to the hash output inputted to the circuit
+    out[0] === states[63][0];
+    out[1] === states[63][1];
+    out[2] === states[63][2];
+    out[3] === states[63][3];
 }
 
 component main{ public [ out ] } = Md5();
