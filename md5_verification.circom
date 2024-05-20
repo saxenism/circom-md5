@@ -7,6 +7,7 @@ include "node_modules/circomlib/circuits/comparators.circom";
 template BitwiseAND() {
     signal input in[2];
     signal output out[32];
+    signal output decimalOut;
 
     signal Ab[32];
     signal Bb[32];
@@ -31,11 +32,16 @@ template BitwiseAND() {
 
         out[i] <== bitwiseAnd[i].out;
     }
+
+    component bits2Num = Bits2Num(32);
+    bits2Num.in <== out;
+    decimalOut <== bits2Num.out;
 }
 
 template BitwiseOR() {
     signal input in[2];
     signal output out[32];
+    signal output decimalOut;
 
     signal Ab[32];
     signal Bb[32];
@@ -60,11 +66,16 @@ template BitwiseOR() {
 
         out[i] <== bitwiseOr[i].out;
     }
+
+    component bits2Num = Bits2Num(32);
+    bits2Num.in <== out;
+    decimalOut <== bits2Num.out;
 }
 
 template BitwiseNOT() {
     signal input in;
     signal output out[32];
+    signal output decimalOut;
 
     signal Ab[32];
 
@@ -81,11 +92,16 @@ template BitwiseNOT() {
         bitwiseNot[i].in <== Ab[i];
         out[i] <== bitwiseNot[i].out;
     }
-}
+
+    component bits2Num = Bits2Num(32);
+    bits2Num.in <== out;
+    decimalOut <== bits2Num.out;
+}   
 
 template BitwiseXOR() {
     signal input in[2];
     signal output out[32];
+    signal output decimalOut;
 
     signal Ab[32];
     signal Bb[32];
@@ -110,11 +126,47 @@ template BitwiseXOR() {
 
         out[i] <== bitwiseXor[i].out;
     }
+
+    component bits2Num = Bits2Num(32);
+    bits2Num.in <== out;
+    decimalOut <== bits2Num.out;
 }
 
 template CombineLoop1() {
+/*
+return (B & C) | (~B & D)
+*/
     signal input B, C, D;
-    signal output out <== 1;
+    signal output out;
+    
+    signal exp1;
+    signal exp2;
+    signal exp3;
+
+    component band[2];
+
+    component bnot = BitwiseNOT();
+    band[0] = BitwiseAND();
+    band[1] = BitwiseAND();
+    component bor = BitwiseOR();
+
+    bnot.in <== B;
+    exp1 <== bnot.decimalOut;
+    
+    band[0].in[0] <== exp1;
+    band[0].in[1] <== D;
+
+    exp2 <== band[0].decimalOut;
+
+    band[1].in[0] <== B;
+    band[1].in[1] <== C;
+
+    exp3 <== band[1].decimalOut;
+
+    bor.in[0] <== exp2;
+    bor.in[1] <== exp3;
+
+    out <== bor.decimalOut;
 }
 
 template CombineLoop2() {
