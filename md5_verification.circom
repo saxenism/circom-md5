@@ -133,12 +133,11 @@ template BitwiseXOR() {
 }
 
 template CombineLoop1() {
-/*
-return (B & C) | (~B & D)
-*/
+    //return (B & C) | (~B & D)
+
     signal input B, C, D;
     signal output out;
-    
+
     signal exp1;
     signal exp2;
     signal exp3;
@@ -170,18 +169,87 @@ return (B & C) | (~B & D)
 }
 
 template CombineLoop2() {
+    // (B & D) | (C & ~D)
     signal input B, C, D;
-    signal output out <== 1;
+    signal output out;
+
+    signal exp1;
+    signal exp2;
+    signal exp3;
+
+    component band[2];
+
+    component bnot = BitwiseNOT();
+    band[0] = BitwiseAND();
+    band[1] = BitwiseAND();
+    component bor = BitwiseOR();
+
+    bnot.in <== D;
+    exp1 <== bnot.decimalOut;
+    
+    band[0].in[0] <== exp1;
+    band[0].in[1] <== C;
+
+    exp2 <== band[0].decimalOut;
+
+    band[1].in[0] <== B;
+    band[1].in[1] <== D;
+
+    exp3 <== band[1].decimalOut;
+
+    bor.in[0] <== exp2;
+    bor.in[1] <== exp3;
+
+    out <== bor.decimalOut;
 }
 
 template CombineLoop3() {
+    // B ^ C ^ D
     signal input B, C, D;
-    signal output out <== 1;
+    signal output out;
+
+    signal exp1;
+
+    component bxor[2];
+
+    bxor[0] = BitwiseXOR();
+    bxor[1] = BitwiseXOR();
+
+    bxor[0].in[0] <== D;
+    bxor[0].in[1] <== C;
+
+    exp1 <== bxor[0].decimalOut;
+
+    bxor[1].in[0] <== exp1;
+    bxor[1].in[1] <== B;
+
+    out <== bxor[1].decimalOut;
 }
 
 template CombineLoop4() {
+    // C ^ (B | ~ D)
     signal input B, C, D;
-    signal output out <== 1;
+    signal output out;
+
+    signal exp1;
+    signal exp2;
+    signal exp3;
+
+    component bnot = BitwiseNOT();
+    component bor = BitwiseOR();
+    component bxor = BitwiseXOR();
+
+    bnot.in <== D;
+    exp1 <== bnot.decimalOut;
+
+    bor.in[0] <== exp1;
+    bor.in[1] <== B;
+    exp2 <== bor.decimalOut;
+
+    bxor.in[0] <== exp2;
+    bxor.in[1] <== C;
+
+    out <== bxor.decimalOut;
 }
 
 template Md5() {
