@@ -6,8 +6,90 @@ include "node_modules/circomlib/circuits/comparators.circom";
 include "node_modules/circomlib/circuits/binsum.circom";
 include "node_modules/circomlib/circuits/multiplexer.circom";
 
-template AddConstantFromK() {
+template IfElse() {
+  signal input cond;
+  signal input L;
+  signal input R;
+  signal output out;
+
+  out <== cond * (L - R) + R;
+}
+
+template Rotate() {
+    signal input in;
+    signal input idx;
+
+    signal output out[32];
+    signal output decimalOut;
     
+    signal rotate_amount[64] <== [
+        7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22, 7, 12, 17, 22,
+        5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20, 5,  9, 14, 20,
+	    4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23, 4, 11, 16, 23,
+	    6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21, 6, 10, 15, 21
+    ];
+
+    // Based on the idx, we need to choose the correct rotator from the array rotate_amount
+    signal index_rotator;
+    component multiplexer = Multiplexer(1, 64);
+    var arr[64][1];
+    for(var i = 0; i < 64; i++) {
+        arr[i][0] = rotate_amount[i];
+    }
+
+    multiplexer.inp <== arr;
+    multiplexer.sel <== idx;
+
+    index_rotator <== multiplexer.out[0];
+
+    // Now we rotate the input in by rotate_amount[index_rotator]
+    signal og_number[32];
+    signal rotated_number[32];
+
+    component n2b = Num2Bits(32);
+    n2b.in <== in;
+
+    og_number <== n2b.out;
+
+    signal rot_num_idx[32];
+    signal cond1[32];
+    signal cond2[32];
+    component isGreaterEqThan[32];
+    for(var i = 0; i < 32; i++) {
+        isGreaterEqThan[i] = GreaterEqThan(32);
+
+        isGreaterEqThan[i].in[0] <== i + index_rotator;
+        isGreaterEqThan[i].in[1] <== 32;
+
+        cond1[i] <== (index_rotator + i - 32) * isGreaterEqThan[i].out;
+        cond2[i] <== (index_rotator + i) * (1 - isGreaterEqThan[i].out);
+
+        rot_num_idx[i] <== cond1[i] + cond2[i];
+    }
+
+    component quinSelector[32];
+    var array[32][1];
+    for(var i = 0; i < 32; i++) {
+        array[i][0] = og_number[i];
+    }
+
+    for(var i = 0; i < 32; i++) {
+        quinSelector[i] = Multiplexer(1, 32);
+
+        quinSelector[i].inp <== array;
+        quinSelector[i].sel <== 31 - rot_num_idx[i];
+
+        rotated_number[31 - i] <== quinSelector[i].out[0];
+    }
+
+    component b2n = Bits2Num(32);
+    b2n.in <== rotated_number;
+    decimalOut <== b2n.out;
+    out <== rotated_number;
+}
+
+template AddConstantFromK() {
+
     signal input in;
     signal input idx;
 
@@ -250,6 +332,7 @@ template CombineLoop1() {
     signal FPlusA;
     signal FPlusAPlusIn;
     signal FPlusAPlusInPlusK;
+    signal RotatedFPlusAPlusInPlusK;
 
     component band[2];
 
@@ -277,10 +360,11 @@ template CombineLoop1() {
     F <== bor.decimalOut;
 
     // Now we need to do a 32 bit addition of F with the A
-    component badd32[2];
+    component badd32[3];
 
     badd32[0] = Add32();
     badd32[1] = Add32();
+    badd32[2] = Add32();
 
     badd32[0].in[0] <== F;
     badd32[0].in[1] <== A;
@@ -300,7 +384,18 @@ template CombineLoop1() {
 
     FPlusAPlusInPlusK <== addK.decimalOut;
 
-    out <== 1;
+    // Now we need to rotate FPlusAPlusInPlusK
+    component rotatoor = Rotate();
+    rotatoor.in <== FPlusAPlusInPlusK;
+    rotatoor.idx <== idx;
+
+    RotatedFPlusAPlusInPlusK <== rotatoor.decimalOut;
+
+    // Finally we will add B to the above result again
+    badd32[2].in[0] <== RotatedFPlusAPlusInPlusK;
+    badd32[2].in[1] <== B;
+
+    out <== badd32[2].decimalOut;
 }
 
 template CombineLoop2() {
@@ -313,6 +408,12 @@ template CombineLoop2() {
     signal exp1;
     signal exp2;
     signal exp3;
+
+    signal F;
+    signal FPlusA;
+    signal FPlusAPlusIn;
+    signal FPlusAPlusInPlusK;
+    signal RotatedFPlusAPlusInPlusK;
 
     component band[2];
 
@@ -337,7 +438,45 @@ template CombineLoop2() {
     bor.in[0] <== exp2;
     bor.in[1] <== exp3;
 
-    out <== bor.decimalOut;
+    F <== bor.decimalOut;
+
+    // Now we need to do a 32 bit addition of F with the A
+    component badd32[3];
+
+    badd32[0] = Add32();
+    badd32[1] = Add32();
+    badd32[2] = Add32();
+
+    badd32[0].in[0] <== F;
+    badd32[0].in[1] <== A;
+
+    FPlusA <== badd32[0].decimalOut;
+
+    // Now we need to do a 32 bit addition of FplusA with input segment of that current iteration
+    badd32[1].in[0] <== FPlusA;
+    badd32[1].in[1] <== in;
+    
+    FPlusAPlusIn <== badd32[1].decimalOut;
+
+    // Now we need to add the corresponding constant to the earlier result
+    component addK = AddConstantFromK();
+    addK.in <== FPlusAPlusIn;
+    addK.idx <== idx;
+
+    FPlusAPlusInPlusK <== addK.decimalOut;
+
+    // Now we need to rotate FPlusAPlusInPlusK
+    component rotatoor = Rotate();
+    rotatoor.in <== FPlusAPlusInPlusK;
+    rotatoor.idx <== idx;
+
+    RotatedFPlusAPlusInPlusK <== rotatoor.decimalOut;
+
+    // Finally we will add B to the above result again
+    badd32[2].in[0] <== RotatedFPlusAPlusInPlusK;
+    badd32[2].in[1] <== B;
+
+    out <== badd32[2].decimalOut;
 }
 
 template CombineLoop3() {
@@ -348,6 +487,11 @@ template CombineLoop3() {
     signal output out;
 
     signal exp1;
+    signal F;
+    signal FPlusA;
+    signal FPlusAPlusIn;
+    signal FPlusAPlusInPlusK;
+    signal RotatedFPlusAPlusInPlusK;
 
     component bxor[2];
 
@@ -362,7 +506,45 @@ template CombineLoop3() {
     bxor[1].in[0] <== exp1;
     bxor[1].in[1] <== B;
 
-    out <== bxor[1].decimalOut;
+    F <== bxor[1].decimalOut;
+
+    // Now we need to do a 32 bit addition of F with the A
+    component badd32[3];
+
+    badd32[0] = Add32();
+    badd32[1] = Add32();
+    badd32[2] = Add32();
+
+    badd32[0].in[0] <== F;
+    badd32[0].in[1] <== A;
+
+    FPlusA <== badd32[0].decimalOut;
+
+    // Now we need to do a 32 bit addition of FplusA with input segment of that current iteration
+    badd32[1].in[0] <== FPlusA;
+    badd32[1].in[1] <== in;
+    
+    FPlusAPlusIn <== badd32[1].decimalOut;
+
+    // Now we need to add the corresponding constant to the earlier result
+    component addK = AddConstantFromK();
+    addK.in <== FPlusAPlusIn;
+    addK.idx <== idx;
+
+    FPlusAPlusInPlusK <== addK.decimalOut;
+
+    // Now we need to rotate FPlusAPlusInPlusK
+    component rotatoor = Rotate();
+    rotatoor.in <== FPlusAPlusInPlusK;
+    rotatoor.idx <== idx;
+
+    RotatedFPlusAPlusInPlusK <== rotatoor.decimalOut;
+
+    // Finally we will add B to the above result again
+    badd32[2].in[0] <== RotatedFPlusAPlusInPlusK;
+    badd32[2].in[1] <== B;
+
+    out <== badd32[2].decimalOut;
 }
 
 template CombineLoop4() {
@@ -375,6 +557,11 @@ template CombineLoop4() {
     signal exp1;
     signal exp2;
     signal exp3;
+    signal F;
+    signal FPlusA;
+    signal FPlusAPlusIn;
+    signal FPlusAPlusInPlusK;
+    signal RotatedFPlusAPlusInPlusK;
 
     component bnot = BitwiseNOT();
     component bor = BitwiseOR();
@@ -390,7 +577,45 @@ template CombineLoop4() {
     bxor.in[0] <== exp2;
     bxor.in[1] <== C;
 
-    out <== bxor.decimalOut;
+    F <== bxor.decimalOut;
+
+    // Now we need to do a 32 bit addition of F with the A
+    component badd32[3];
+
+    badd32[0] = Add32();
+    badd32[1] = Add32();
+    badd32[2] = Add32();
+
+    badd32[0].in[0] <== F;
+    badd32[0].in[1] <== A;
+
+    FPlusA <== badd32[0].decimalOut;
+
+    // Now we need to do a 32 bit addition of FplusA with input segment of that current iteration
+    badd32[1].in[0] <== FPlusA;
+    badd32[1].in[1] <== in;
+    
+    FPlusAPlusIn <== badd32[1].decimalOut;
+
+    // Now we need to add the corresponding constant to the earlier result
+    component addK = AddConstantFromK();
+    addK.in <== FPlusAPlusIn;
+    addK.idx <== idx;
+
+    FPlusAPlusInPlusK <== addK.decimalOut;
+
+    // Now we need to rotate FPlusAPlusInPlusK
+    component rotatoor = Rotate();
+    rotatoor.in <== FPlusAPlusInPlusK;
+    rotatoor.idx <== idx;
+
+    RotatedFPlusAPlusInPlusK <== rotatoor.decimalOut;
+
+    // Finally we will add B to the above result again
+    badd32[2].in[0] <== RotatedFPlusAPlusInPlusK;
+    badd32[2].in[1] <== B;
+
+    out <== badd32[2].decimalOut;
 }
 
 template Md5() {
