@@ -136,6 +136,7 @@ template CombineLoop1() {
     //return (B & C) | (~B & D)
 
     signal input B, C, D;
+    signal input in;
     signal output out;
 
     signal exp1;
@@ -171,6 +172,7 @@ template CombineLoop1() {
 template CombineLoop2() {
     // (B & D) | (C & ~D)
     signal input B, C, D;
+    signal input in;
     signal output out;
 
     signal exp1;
@@ -206,6 +208,7 @@ template CombineLoop2() {
 template CombineLoop3() {
     // B ^ C ^ D
     signal input B, C, D;
+    signal input in;
     signal output out;
 
     signal exp1;
@@ -229,6 +232,7 @@ template CombineLoop3() {
 template CombineLoop4() {
     // C ^ (B | ~ D)
     signal input B, C, D;
+    signal input in;
     signal output out;
 
     signal exp1;
@@ -303,6 +307,7 @@ template Md5() {
         combine1[i].B <== states[i-1][1];
         combine1[i].C <== states[i-1][2];
         combine1[i].D <== states[i-1][3];
+        combine1[i].in <== in[i];
 
         states[i][0] <== states[i-1][3];
         states[i][1] <== combine1[i].out;
@@ -318,6 +323,7 @@ template Md5() {
         combine2[c2_idx].B <== states[j-1][1];
         combine2[c2_idx].C <== states[j-1][2];
         combine2[c2_idx].D <== states[j-1][3];
+        combine2[c2_idx].in <== in[(5 * j + 1) % 16];
 
         states[j][0] <== states[j-1][3];
         states[j][1] <== combine2[c2_idx].out;
@@ -335,6 +341,7 @@ template Md5() {
         combine3[c3_idx].B <== states[l-1][1];
         combine3[c3_idx].C <== states[l-1][2];
         combine3[c3_idx].D <== states[l-1][3];
+        combine3[c3_idx].in <== in[(3 * l + 5) % 16];
 
         states[l][0] <== states[l-1][3];
         states[l][1] <== combine3[c3_idx].out;
@@ -352,6 +359,7 @@ template Md5() {
         combine4[c4_idx].B <== states[k-1][1];
         combine4[c4_idx].C <== states[k-1][2];
         combine4[c4_idx].D <== states[k-1][3];
+        combine4[c4_idx].in <== in[(7 * k) % 16];
 
         states[k][0] <== states[k-1][3];
         states[k][1] <== combine4[c4_idx].out;
