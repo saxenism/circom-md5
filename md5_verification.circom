@@ -3,6 +3,108 @@ pragma circom 2.1.6;
 include "node_modules/circomlib/circuits/gates.circom";
 include "node_modules/circomlib/circuits/bitify.circom";
 include "node_modules/circomlib/circuits/comparators.circom";
+include "node_modules/circomlib/circuits/binsum.circom";
+include "node_modules/circomlib/circuits/multiplexer.circom";
+
+template AddConstantFromK() {
+    
+    signal input in;
+    signal input idx;
+
+    signal output out[32];
+    signal output decimalOut;
+
+    /*
+        signal K[64] <== [
+            0xd76aa478, 0xe8c7b756, 0x242070db, 0xc1bdceee
+            0xf57c0faf, 0x4787c62a, 0xa8304613, 0xfd469501,
+            0x698098d8, 0x8b44f7af, 0xffff5bb1, 0x895cd7be, 
+            0x6b901122, 0xfd987193, 0xa679438e, 0x49b40821, 
+            0xf61e2562, 0xc040b340, 0x265e5a51, 0xe9b6c7aa, 
+            0xd62f105d, 0x02441453, 0xd8a1e681, 0xe7d3fbc8, 
+            0x21e1cde6, 0xc33707d6, 0xf4d50d87, 0x455a14ed, 
+            0xa9e3e905, 0xfcefa3f8, 0x676f02d9, 0x8d2a4c8a, 
+            0xfffa3942, 0x8771f681, 0x6d9d6122, 0xfde5380c, 
+            0xa4beea44, 0x4bdecfa9, 0xf6bb4b60, 0xbebfbc70, 
+            0x289b7ec6, 0xeaa127fa, 0xd4ef3085, 0x04881d05, 
+            0xd9d4d039, 0xe6db99e5, 0x1fa27cf8, 0xc4ac5665, 
+            0xf4292244, 0x432aff97, 0xab9423a7, 0xfc93a039, 
+            0x655b59c3, 0x8f0ccc92, 0xffeff47d, 0x85845dd1, 
+            0x6fa87e4f, 0xfe2ce6e0, 0xa3014314, 0x4e0811a1, 
+            0xf7537e82, 0xbd3af235, 0x2ad7d2bb, 0xeb86d391 
+        ];
+    */
+    signal K[64] <== [
+        3614090360, 3905402710, 606105819, 3250441966,    
+        4118548399, 1200080426, 2821735955, 4249261313,    
+        1735328473, 2368359562, 4294925233, 2336552878,    
+        1755183732, 4243563511, 2850285822, 1236535329,    
+        4118548394, 3225465664, 643717713, 3921069994,    
+        3600352805, 38016083, 4096336452, 3875764656,    
+        568446438, 3275163606, 4107603335, 1163531501,    
+        2850285829, 4249261313, 1735328473, 2368359562,   
+        4294925234, 2272392833, 1839030562, 4279200364,    
+        2763975236, 1272893353, 4149444224, 3183894230,    
+        681279174, 3936430074, 3572445317, 761622411,    
+        3654602809, 3866312157, 531131761, 3302518473,    
+        4096336452, 113926993, 2889905487, 4237533241,    
+        1700485571, 2399980690, 4293915773, 2240044497,    
+        1873313359, 4264355552, 2600822928, 1313534501,    
+        4157632342, 3174756917, 719683457, 3951481745
+    ];
+
+
+    // Based on the idx, we need to choose the correct constant from the array K
+    signal index_constant;
+    component multiplexer = Multiplexer(1, 64);
+    var arr[64][1];
+    for(var i = 0; i < 64; i++) {
+        arr[i][0] = K[i];
+    }
+
+    multiplexer.inp <== arr;
+    multiplexer.sel <== idx;
+
+    index_constant <== multiplexer.out[0];
+
+    component badd = Add32();
+    badd.in[0] <== in;
+    badd.in[1] <== index_constant;
+
+    out <== badd.out;
+    decimalOut <== badd.decimalOut;
+}
+
+// template for doing 32 bit addition
+template Add32() {
+    signal input in[2];
+    signal output decimalOut;
+    signal output out[32];
+
+    component band = BitwiseAND();
+
+    band.in[0] <== in[0] + in[1];
+    band.in[1] <== 4294967295; // (0xFFFFFFFF) This mask ensures that only 32 bit addition happens
+    out <== band.out;
+    decimalOut <== band.decimalOut;
+
+    // Now we need to place constraints to verify if the calculation is indeed correct or not
+    component bsum = BinSum(32, 2);
+    component n2b[2];
+
+    n2b[0] = Num2Bits(32);
+    n2b[1] = Num2Bits(32);
+
+    n2b[0].in <== in[0];
+    n2b[1].in <== in[1];
+
+    bsum.in[0] <== n2b[0].out;
+    bsum.in[1] <== n2b[1].out;
+
+    for(var i = 0; i < 32; i++) {
+        bsum.out[i] === out[i];
+    }
+}
 
 template BitwiseAND() {
     signal input in[2];
@@ -133,15 +235,21 @@ template BitwiseXOR() {
 }
 
 template CombineLoop1() {
-    //return (B & C) | (~B & D)
+    //F = (B & C) | (~B & D)
 
-    signal input B, C, D;
+    signal input A, B, C, D;
     signal input in;
+    signal input idx;
     signal output out;
 
     signal exp1;
     signal exp2;
     signal exp3;
+
+    signal F;
+    signal FPlusA;
+    signal FPlusAPlusIn;
+    signal FPlusAPlusInPlusK;
 
     component band[2];
 
@@ -166,12 +274,39 @@ template CombineLoop1() {
     bor.in[0] <== exp2;
     bor.in[1] <== exp3;
 
-    out <== bor.decimalOut;
+    F <== bor.decimalOut;
+
+    // Now we need to do a 32 bit addition of F with the A
+    component badd32[2];
+
+    badd32[0] = Add32();
+    badd32[1] = Add32();
+
+    badd32[0].in[0] <== F;
+    badd32[0].in[1] <== A;
+
+    FPlusA <== badd32[0].decimalOut;
+
+    // Now we need to do a 32 bit addition of FplusA with input segment of that current iteration
+    badd32[1].in[0] <== FPlusA;
+    badd32[1].in[1] <== in;
+    
+    FPlusAPlusIn <== badd32[1].decimalOut;
+
+    // Now we need to add the corresponding constant to the earlier result
+    component addK = AddConstantFromK();
+    addK.in <== FPlusAPlusIn;
+    addK.idx <== idx;
+
+    FPlusAPlusInPlusK <== addK.decimalOut;
+
+    out <== 1;
 }
 
 template CombineLoop2() {
-    // (B & D) | (C & ~D)
-    signal input B, C, D;
+    // F = (B & D) | (C & ~D)
+    signal input A, B, C, D;
+    signal input idx;
     signal input in;
     signal output out;
 
@@ -206,8 +341,9 @@ template CombineLoop2() {
 }
 
 template CombineLoop3() {
-    // B ^ C ^ D
-    signal input B, C, D;
+    // F = B ^ C ^ D
+    signal input A, B, C, D;
+    signal input idx;
     signal input in;
     signal output out;
 
@@ -230,9 +366,10 @@ template CombineLoop3() {
 }
 
 template CombineLoop4() {
-    // C ^ (B | ~ D)
-    signal input B, C, D;
+    // F = C ^ (B | ~ D)
+    signal input A, B, C, D;
     signal input in;
+    signal input idx;
     signal output out;
 
     signal exp1;
@@ -304,10 +441,12 @@ template Md5() {
     for(var i = 1; i < 16; i++) {
         combine1[i] = CombineLoop1();
 
+        combine1[i].A <== states[i-1][0];
         combine1[i].B <== states[i-1][1];
         combine1[i].C <== states[i-1][2];
         combine1[i].D <== states[i-1][3];
         combine1[i].in <== in[i];
+        combine1[i].idx <== i;
 
         states[i][0] <== states[i-1][3];
         states[i][1] <== combine1[i].out;
@@ -320,10 +459,13 @@ template Md5() {
     for(var j = 16; j < 32; j++) {
         combine2[c2_idx] = CombineLoop2();
 
+        combine2[c2_idx].A <== states[j-1][0];
         combine2[c2_idx].B <== states[j-1][1];
         combine2[c2_idx].C <== states[j-1][2];
         combine2[c2_idx].D <== states[j-1][3];
         combine2[c2_idx].in <== in[(5 * j + 1) % 16];
+        combine2[c2_idx].idx <== j;
+
 
         states[j][0] <== states[j-1][3];
         states[j][1] <== combine2[c2_idx].out;
@@ -338,10 +480,12 @@ template Md5() {
     for(var l = 32; l < 48; l++) {
         combine3[c3_idx] = CombineLoop3();
 
+        combine3[c3_idx].A <== states[l-1][0];
         combine3[c3_idx].B <== states[l-1][1];
         combine3[c3_idx].C <== states[l-1][2];
         combine3[c3_idx].D <== states[l-1][3];
         combine3[c3_idx].in <== in[(3 * l + 5) % 16];
+        combine3[c3_idx].idx <== l;
 
         states[l][0] <== states[l-1][3];
         states[l][1] <== combine3[c3_idx].out;
@@ -356,10 +500,12 @@ template Md5() {
     for(var k = 48; k < 64; k++) {
         combine4[c4_idx] = CombineLoop4();
 
+        combine4[c4_idx].A <== states[k-1][0];
         combine4[c4_idx].B <== states[k-1][1];
         combine4[c4_idx].C <== states[k-1][2];
         combine4[c4_idx].D <== states[k-1][3];
         combine4[c4_idx].in <== in[(7 * k) % 16];
+        combine4[c4_idx].idx <== k;
 
         states[k][0] <== states[k-1][3];
         states[k][1] <== combine4[c4_idx].out;
