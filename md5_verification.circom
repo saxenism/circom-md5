@@ -556,7 +556,6 @@ template CombineLoop4() {
 
     signal exp1;
     signal exp2;
-    signal exp3;
     signal F;
     signal FPlusA;
     signal FPlusAPlusIn;
