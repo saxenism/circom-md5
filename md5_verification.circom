@@ -746,4 +746,4 @@ template Md5() {
     out[3] === states[63][3];
 }
 
-component main{ public [ out ] } = Md5();
+component main{ public [ in, out ] } = Md5();
